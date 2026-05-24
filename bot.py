@@ -383,6 +383,7 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE, date_fr
         sheet = get_sheet()
         expense_sheet = get_expense_sheet()
         fuel_records = filter_by_period(sheet.get_all_records(), date_from, date_to)
+        await update.message.reply_text(f"Сырые данные: {fuel_records}")
         expense_records = filter_by_period(expense_sheet.get_all_records(), date_from, date_to)
 
         total_fuel_cost = sum(to_float(r["Сумма"]) for r in fuel_records)
