@@ -392,7 +392,7 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE, date_fr
         total_fuel_cost = sum(to_float(r["Сумма"]) for r in fuel_records)
         total_liters = sum(to_float(r["Литры"]) for r in fuel_records)
         gdrive_count = sum(1 for r in fuel_records if r["Тип топлива"] == "G-Drive")
-        fuel_95_cost = sum(to_float(r["Сумма"]) for r in fuel_records if r["Тип топлива"] == "95")
+        fuel_95_cost = sum(to_float(r["Сумма"]) for r in fuel_records if str(r["Тип топлива"]) == "95")
         gdrive_cost = sum(to_float(r["Сумма"]) for r in fuel_records if r["Тип топлива"] == "G-Drive")
         total_expenses = sum(to_float(r["Сумма"]) for r in expense_records) if expense_records else 0
 
