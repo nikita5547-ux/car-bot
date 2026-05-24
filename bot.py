@@ -3,7 +3,6 @@ import logging
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
-from calendar import monthrange
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
 from groq import Groq
@@ -15,6 +14,12 @@ groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 SPREADSHEET_ID = os.environ["SPREADSHEET_ID"]
 GOOGLE_CREDENTIALS = os.environ["GOOGLE_CREDENTIALS"]
+
+def to_float(value):
+    try:
+        return float(str(value).replace(",", "."))
+    except:
+        return 0.0
 
 def get_sheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -203,14 +208,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             elif text in ["Этот месяц", "Прошлый месяц", "3 месяца", "6 месяцев", "Год"]:
                 date_from, date_to = get_period(text)
-                data["date_from"] = date_from
-                data["date_to"] = date_to
-                await show_stats(update, context, data["date_from"], data["date_to"])
+                await show_stats(update, context, date_from, date_to)
                 del user_data[user_id]
                 return
 
         if data["action"] == "stats" and data.get("custom_period") and "date_from" not in data:
-            date = parse_date(text) if text != "📅 Сегодня" else None
             try:
                 datetime.strptime(text, "%d.%m.%Y")
                 data["date_from"] = text
@@ -377,19 +379,19 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE, date_fr
         fuel_records = filter_by_period(sheet.get_all_records(), date_from, date_to)
         expense_records = filter_by_period(expense_sheet.get_all_records(), date_from, date_to)
 
-        total_fuel_cost = sum(r["Сумма"] for r in fuel_records)
-        total_liters = sum(r["Литры"] for r in fuel_records)
+        total_fuel_cost = sum(to_float(r["Сумма"]) for r in fuel_records)
+        total_liters = sum(to_float(r["Литры"]) for r in fuel_records)
         gdrive_count = sum(1 for r in fuel_records if r["Тип топлива"] == "G-Drive")
-        fuel_95_cost = sum(r["Сумма"] for r in fuel_records if r["Тип топлива"] == "95")
-        gdrive_cost = sum(r["Сумма"] for r in fuel_records if r["Тип топлива"] == "G-Drive")
-        total_expenses = sum(r["Сумма"] for r in expense_records) if expense_records else 0
+        fuel_95_cost = sum(to_float(r["Сумма"]) for r in fuel_records if r["Тип топлива"] == "95")
+        gdrive_cost = sum(to_float(r["Сумма"]) for r in fuel_records if r["Тип топлива"] == "G-Drive")
+        total_expenses = sum(to_float(r["Сумма"]) for r in expense_records) if expense_records else 0
 
-        mileage_records = [r for r in fuel_records if r.get("Пробег") != ""]
+        mileage_records = [r for r in fuel_records if r.get("Пробег") not in ["", None]]
         cost_per_km_text = ""
         if len(mileage_records) >= 2:
             try:
-                first_mileage = int(mileage_records[0]["Пробег"])
-                last_mileage = int(mileage_records[-1]["Пробег"])
+                first_mileage = int(str(mileage_records[0]["Пробег"]).replace(" ", ""))
+                last_mileage = int(str(mileage_records[-1]["Пробег"]).replace(" ", ""))
                 total_km = last_mileage - first_mileage
                 if total_km > 0:
                     cost_per_km = round((total_fuel_cost + total_expenses) / total_km, 2)
