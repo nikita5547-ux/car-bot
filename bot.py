@@ -45,6 +45,7 @@ user_data = {}
 
 MAIN_KEYBOARD = [["⛽ Заправка", "🚗 Расход"], ["📊 Статистика", "🕐 Последняя G-Drive"]]
 DATE_KEYBOARD = [["📅 Сегодня"], ["◀️ Назад"]]
+MILEAGE_KEYBOARD = [["⏭ Пропустить"], ["◀️ Назад"]]
 
 def parse_date(text):
     if text == "📅 Сегодня":
@@ -130,35 +131,40 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data["action"] == "fuel" and "liters" in data and "price" not in data:
             try:
                 data["price"] = float(text.replace(",", "."))
-                await update.message.reply_text("Текущий пробег (км)?")
+                reply_markup = ReplyKeyboardMarkup(MILEAGE_KEYBOARD, resize_keyboard=True)
+                await update.message.reply_text("Текущий пробег (км)?", reply_markup=reply_markup)
                 return
             except:
                 await update.message.reply_text("Введи число, например: 52.5")
                 return
 
         if data["action"] == "fuel" and "price" in data and "mileage" not in data:
-            try:
-                data["mileage"] = int(text.replace(" ", ""))
-                total = round(data["liters"] * data["price"], 2)
-                sheet = get_sheet()
-                sheet.append_row([
-                    data["date"],
-                    data["fuel_type"],
-                    data["liters"],
-                    data["price"],
-                    total,
-                    data["mileage"]
-                ])
-                del user_data[user_id]
-                reply_markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
-                await update.message.reply_text(
-                    f"✅ Записано!\n{data['fuel_type']}, {data['liters']} л × {data['price']} ₽ = {total} ₽\nДата: {data['date']}\nПробег: {data['mileage']} км",
-                    reply_markup=reply_markup
-                )
-                return
-            except:
-                await update.message.reply_text("Введи число, например: 45000")
-                return
+            if text == "⏭ Пропустить":
+                data["mileage"] = ""
+            else:
+                try:
+                    data["mileage"] = int(text.replace(" ", ""))
+                except:
+                    await update.message.reply_text("Введи число, например: 45000")
+                    return
+            total = round(data["liters"] * data["price"], 2)
+            sheet = get_sheet()
+            sheet.append_row([
+                data["date"],
+                data["fuel_type"],
+                data["liters"],
+                data["price"],
+                total,
+                data["mileage"]
+            ])
+            del user_data[user_id]
+            reply_markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
+            mileage_text = f"\nПробег: {data['mileage']} км" if data["mileage"] != "" else ""
+            await update.message.reply_text(
+                f"✅ Записано!\n{data['fuel_type']}, {data['liters']} л × {data['price']} ₽ = {total} ₽\nДата: {data['date']}{mileage_text}",
+                reply_markup=reply_markup
+            )
+            return
 
         # РАСХОДЫ
         if data["action"] == "expense" and "expense_type" not in data:
@@ -186,32 +192,37 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data["action"] == "expense" and "date" in data and "amount" not in data:
             try:
                 data["amount"] = float(text.replace(",", "."))
-                await update.message.reply_text("Текущий пробег (км)?")
+                reply_markup = ReplyKeyboardMarkup(MILEAGE_KEYBOARD, resize_keyboard=True)
+                await update.message.reply_text("Текущий пробег (км)?", reply_markup=reply_markup)
                 return
             except:
                 await update.message.reply_text("Введи число, например: 1500")
                 return
 
         if data["action"] == "expense" and "amount" in data and "mileage" not in data:
-            try:
-                data["mileage"] = int(text.replace(" ", ""))
-                sheet = get_expense_sheet()
-                sheet.append_row([
-                    data["date"],
-                    data["expense_type"],
-                    data["amount"],
-                    data["mileage"]
-                ])
-                del user_data[user_id]
-                reply_markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
-                await update.message.reply_text(
-                    f"✅ Записано!\n{data['expense_type']}: {data['amount']} ₽\nДата: {data['date']}\nПробег: {data['mileage']} км",
-                    reply_markup=reply_markup
-                )
-                return
-            except:
-                await update.message.reply_text("Введи число, например: 45000")
-                return
+            if text == "⏭ Пропустить":
+                data["mileage"] = ""
+            else:
+                try:
+                    data["mileage"] = int(text.replace(" ", ""))
+                except:
+                    await update.message.reply_text("Введи число, например: 45000")
+                    return
+            sheet = get_expense_sheet()
+            sheet.append_row([
+                data["date"],
+                data["expense_type"],
+                data["amount"],
+                data["mileage"]
+            ])
+            del user_data[user_id]
+            reply_markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
+            mileage_text = f"\nПробег: {data['mileage']} км" if data["mileage"] != "" else ""
+            await update.message.reply_text(
+                f"✅ Записано!\n{data['expense_type']}: {data['amount']} ₽\nДата: {data['date']}{mileage_text}",
+                reply_markup=reply_markup
+            )
+            return
 
 async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -231,6 +242,16 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         gdrive_cost = sum(r["Сумма"] for r in fuel_records if r["Тип топлива"] == "G-Drive")
         total_expenses = sum(r["Сумма"] for r in expense_records) if expense_records else 0
 
+        mileage_records = [r for r in fuel_records if r["Пробег"] != ""]
+        cost_per_km_text = ""
+        if len(mileage_records) >= 2:
+            first_mileage = int(mileage_records[0]["Пробег"])
+            last_mileage = int(mileage_records[-1]["Пробег"])
+            total_km = last_mileage - first_mileage
+            if total_km > 0:
+                cost_per_km = round((total_fuel_cost + total_expenses) / total_km, 2)
+                cost_per_km_text = f"\n📍 Стоимость км: {cost_per_km} ₽"
+
         text = (
             f"📊 Статистика:\n\n"
             f"⛽ Всего потрачено на топливо: {total_fuel_cost:.0f} ₽\n"
@@ -239,6 +260,7 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Всего литров: {total_liters:.1f}\n\n"
             f"🚗 Прочие расходы: {total_expenses:.0f} ₽\n\n"
             f"💰 Итого на машину: {total_fuel_cost + total_expenses:.0f} ₽"
+            f"{cost_per_km_text}"
         )
         await update.message.reply_text(text)
     except Exception as e:
