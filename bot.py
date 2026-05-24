@@ -292,7 +292,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return
             total = round(data["liters"] * data["price"], 2)
             sheet = get_sheet()
-            sheet.append_row([data["date"], data["fuel_type"], data["liters"], data["price"], total, data["mileage"]])
+            sheet.append_row([data["date"], data["fuel_type"],
+                str(data["liters"]).replace(",", "."),
+                str(data["price"]).replace(",", "."),
+                str(total).replace(",", "."),
+                data["mileage"]])
             del user_data[user_id]
             reply_markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
             mileage_text = f"\nПробег: {data['mileage']} км" if data["mileage"] != "" else ""
