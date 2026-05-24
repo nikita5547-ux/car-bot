@@ -4,7 +4,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes, ConversationHandler
+from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
 from groq import Groq
 import json
 
@@ -14,8 +14,6 @@ groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 SPREADSHEET_ID = os.environ["SPREADSHEET_ID"]
 GOOGLE_CREDENTIALS = os.environ["GOOGLE_CREDENTIALS"]
-
-CHOOSING, FUEL_LITERS, FUEL_PRICE, FUEL_MILEAGE, EXPENSE_TYPE, EXPENSE_AMOUNT, EXPENSE_MILEAGE = range(7)
 
 def get_sheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -45,30 +43,32 @@ def get_expense_sheet():
 
 user_data = {}
 
+MAIN_KEYBOARD = [["⛽ Заправка", "🚗 Расход"], ["📊 Статистика", "🕐 Последняя G-Drive"]]
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        ["⛽ Заправка", "🚗 Расход"],
-        ["📊 Статистика", "🕐 Последняя G-Drive"]
-    ]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text(
-        "Привет! Я бот для учёта расходов на машину. Выбери действие:",
-        reply_markup=reply_markup
-    )
+    reply_markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
+    await update.message.reply_text("Привет! Я бот для учёта расходов на машину. Выбери действие:", reply_markup=reply_markup)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user_id = update.message.from_user.id
 
+    if text == "◀️ Назад":
+        if user_id in user_data:
+            del user_data[user_id]
+        reply_markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
+        await update.message.reply_text("Главное меню:", reply_markup=reply_markup)
+        return
+
     if text == "⛽ Заправка":
-        keyboard = [["95", "G-Drive"]]
+        keyboard = [["95", "G-Drive"], ["◀️ Назад"]]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         await update.message.reply_text("Какое топливо?", reply_markup=reply_markup)
         user_data[user_id] = {"action": "fuel"}
         return
 
     if text == "🚗 Расход":
-        keyboard = [["Мойка", "Страховка"], ["Техосмотр", "Сервис"]]
+        keyboard = [["Мойка", "Страховка"], ["Техосмотр", "Сервис"], ["◀️ Назад"]]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         await update.message.reply_text("Тип расхода?", reply_markup=reply_markup)
         user_data[user_id] = {"action": "expense"}
@@ -88,7 +88,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data["action"] == "fuel" and "fuel_type" not in data:
             if text in ["95", "G-Drive"]:
                 data["fuel_type"] = text
-                await update.message.reply_text("Сколько литров залил?")
+                keyboard = [["◀️ Назад"]]
+                reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                await update.message.reply_text("Сколько литров залил?", reply_markup=reply_markup)
                 return
 
         if data["action"] == "fuel" and "fuel_type" in data and "liters" not in data:
@@ -123,8 +125,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     data["mileage"]
                 ])
                 del user_data[user_id]
-                keyboard = [["⛽ Заправка", "🚗 Расход"], ["📊 Статистика", "🕐 Последняя G-Drive"]]
-                reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                reply_markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
                 await update.message.reply_text(
                     f"✅ Записано!\n{data['fuel_type']}, {data['liters']} л × {data['price']} ₽ = {total} ₽\nПробег: {data['mileage']} км",
                     reply_markup=reply_markup
@@ -137,7 +138,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if data["action"] == "expense" and "expense_type" not in data:
             if text in ["Мойка", "Страховка", "Техосмотр", "Сервис"]:
                 data["expense_type"] = text
-                await update.message.reply_text("Сумма (₽)?")
+                keyboard = [["◀️ Назад"]]
+                reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                await update.message.reply_text("Сумма (₽)?", reply_markup=reply_markup)
                 return
 
         if data["action"] == "expense" and "expense_type" in data and "amount" not in data:
@@ -160,8 +163,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     data["mileage"]
                 ])
                 del user_data[user_id]
-                keyboard = [["⛽ Заправка", "🚗 Расход"], ["📊 Статистика", "🕐 Последняя G-Drive"]]
-                reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+                reply_markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
                 await update.message.reply_text(
                     f"✅ Записано!\n{data['expense_type']}: {data['amount']} ₽\nПробег: {data['mileage']} км",
                     reply_markup=reply_markup
@@ -187,7 +189,6 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         gdrive_count = sum(1 for r in fuel_records if r["Тип топлива"] == "G-Drive")
         fuel_95_cost = sum(r["Сумма"] for r in fuel_records if r["Тип топлива"] == "95")
         gdrive_cost = sum(r["Сумма"] for r in fuel_records if r["Тип топлива"] == "G-Drive")
-
         total_expenses = sum(r["Сумма"] for r in expense_records) if expense_records else 0
 
         text = (
