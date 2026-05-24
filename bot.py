@@ -17,7 +17,13 @@ GOOGLE_CREDENTIALS = os.environ["GOOGLE_CREDENTIALS"]
 
 def to_float(value):
     try:
-        return float(str(value).replace(",", "."))
+        s = str(value).replace(" ", "")
+        # Если есть запятая и точка — убираем запятую (разделитель тысяч)
+        if "," in s and "." in s:
+            s = s.replace(",", "")
+        else:
+            s = s.replace(",", ".")
+        return float(s)
     except:
         return 0.0
 
