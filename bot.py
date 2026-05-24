@@ -44,6 +44,16 @@ def get_expense_sheet():
 user_data = {}
 
 MAIN_KEYBOARD = [["⛽ Заправка", "🚗 Расход"], ["📊 Статистика", "🕐 Последняя G-Drive"]]
+DATE_KEYBOARD = [["📅 Сегодня"], ["◀️ Назад"]]
+
+def parse_date(text):
+    if text == "📅 Сегодня":
+        return datetime.now().strftime("%d.%m.%Y")
+    try:
+        datetime.strptime(text, "%d.%m.%Y")
+        return text
+    except:
+        return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
@@ -85,15 +95,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in user_data:
         data = user_data[user_id]
 
+        # ЗАПРАВКА
         if data["action"] == "fuel" and "fuel_type" not in data:
             if text in ["95", "G-Drive"]:
                 data["fuel_type"] = text
+                reply_markup = ReplyKeyboardMarkup(DATE_KEYBOARD, resize_keyboard=True)
+                await update.message.reply_text(
+                    "Дата заправки?\nНажми «Сегодня» или введи вручную (например: 23.05.2026)",
+                    reply_markup=reply_markup
+                )
+                return
+
+        if data["action"] == "fuel" and "fuel_type" in data and "date" not in data:
+            date = parse_date(text)
+            if date:
+                data["date"] = date
                 keyboard = [["◀️ Назад"]]
                 reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
                 await update.message.reply_text("Сколько литров залил?", reply_markup=reply_markup)
                 return
+            else:
+                await update.message.reply_text("Неверный формат. Введи дату как 23.05.2026 или нажми «Сегодня»")
+                return
 
-        if data["action"] == "fuel" and "fuel_type" in data and "liters" not in data:
+        if data["action"] == "fuel" and "date" in data and "liters" not in data:
             try:
                 data["liters"] = float(text.replace(",", "."))
                 await update.message.reply_text("Цена за литр?")
@@ -117,7 +142,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 total = round(data["liters"] * data["price"], 2)
                 sheet = get_sheet()
                 sheet.append_row([
-                    datetime.now().strftime("%d.%m.%Y"),
+                    data["date"],
                     data["fuel_type"],
                     data["liters"],
                     data["price"],
@@ -127,7 +152,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 del user_data[user_id]
                 reply_markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
                 await update.message.reply_text(
-                    f"✅ Записано!\n{data['fuel_type']}, {data['liters']} л × {data['price']} ₽ = {total} ₽\nПробег: {data['mileage']} км",
+                    f"✅ Записано!\n{data['fuel_type']}, {data['liters']} л × {data['price']} ₽ = {total} ₽\nДата: {data['date']}\nПробег: {data['mileage']} км",
                     reply_markup=reply_markup
                 )
                 return
@@ -135,15 +160,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("Введи число, например: 45000")
                 return
 
+        # РАСХОДЫ
         if data["action"] == "expense" and "expense_type" not in data:
             if text in ["Мойка", "Страховка", "Техосмотр", "Сервис"]:
                 data["expense_type"] = text
+                reply_markup = ReplyKeyboardMarkup(DATE_KEYBOARD, resize_keyboard=True)
+                await update.message.reply_text(
+                    "Дата?\nНажми «Сегодня» или введи вручную (например: 23.05.2026)",
+                    reply_markup=reply_markup
+                )
+                return
+
+        if data["action"] == "expense" and "expense_type" in data and "date" not in data:
+            date = parse_date(text)
+            if date:
+                data["date"] = date
                 keyboard = [["◀️ Назад"]]
                 reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
                 await update.message.reply_text("Сумма (₽)?", reply_markup=reply_markup)
                 return
+            else:
+                await update.message.reply_text("Неверный формат. Введи дату как 23.05.2026 или нажми «Сегодня»")
+                return
 
-        if data["action"] == "expense" and "expense_type" in data and "amount" not in data:
+        if data["action"] == "expense" and "date" in data and "amount" not in data:
             try:
                 data["amount"] = float(text.replace(",", "."))
                 await update.message.reply_text("Текущий пробег (км)?")
@@ -157,7 +197,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 data["mileage"] = int(text.replace(" ", ""))
                 sheet = get_expense_sheet()
                 sheet.append_row([
-                    datetime.now().strftime("%d.%m.%Y"),
+                    data["date"],
                     data["expense_type"],
                     data["amount"],
                     data["mileage"]
@@ -165,7 +205,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 del user_data[user_id]
                 reply_markup = ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
                 await update.message.reply_text(
-                    f"✅ Записано!\n{data['expense_type']}: {data['amount']} ₽\nПробег: {data['mileage']} км",
+                    f"✅ Записано!\n{data['expense_type']}: {data['amount']} ₽\nДата: {data['date']}\nПробег: {data['mileage']} км",
                     reply_markup=reply_markup
                 )
                 return
